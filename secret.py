@@ -1,108 +1,112 @@
 import socket
 import requests
-import time
 import sys
+import os
+from datetime import datetime
 from scapy.all import traceroute
 from colorama import Fore, Style, init
 
-# Inicialización de colores
+# Inicialización
 init(autoreset=True)
 
-# Configuración de Autor
-AUTHOR = "lapsusgroup/thesixclown"
-VERSION = "1.0.2"
+# --- CONFIGURACIÓN Y AUTOR ---
+AUTHOR = "Thesixclown/lapsusgroup"
+VERSION = "2.0.1"
 
 def banner():
-    ascii_art = f""
-    {Fore.CYAN}       ________  __    __   ______  
-/        |/  |  /  | /      \ 
-$$$$$$$$/ $$ |  $$ |/$$$$$$  |
-   $$ |   $$ |__$$ |$$ |  $$/ 
-   $$ |   $$    $$ |$$ |      
-   $$ |   $$$$$$$$ |$$ |   __ 
-   $$ |   $$ |  $$ |$$ \__/  |
-   $$ |   $$ |  $$ |$$    $$/ 
-   $$/    $$/   $$/  $$$$$$/  
-                              
-                              
-                                      
-    {Fore.CYAN}
-    {Fore.BLUE}
-    {Fore.BLUE}
-    {Fore.CYAN}
-    {Fore.CYAN}
-    {Fore.WHITE}       [ LEAKS/DOXING WEBSITE ]
-    {Fore.YELLOW}             Creator: {33G}
+    banner_text = f"""
+    {Fore.CYAN}███╗   ██╗███████╗██╗  ██╗██╗   ██╗███████╗
+    {Fore.CYAN}████╗  ██║██╔════╝╚██╗██╔╝██║   ██║██╔════╝
+    {Fore.BLUE}██╔██╗ ██║█████╗   ╚███╔╝ ██║   ██║███████╗
+    {Fore.BLUE}██║╚██╗██║██╔══╝   ██╔██╗ ██║   ██║╚════██║
+    {Fore.CYAN}██║ ╚████║███████╗██╔╝ ██╗╚██████╔╝███████║
+    {Fore.WHITE}      [ OSINT & INFRASTRUCTURE SCANNER ]
+    {Fore.YELLOW}             Author: {333g}
     """
-    print(ascii_art)
+    print(banner_text)
 
-def get_geo_info(ip):
-    try:
-        response = requests.get(f"http://ip-api.com/json/{ip}?fields=status,message,country,regionName,city,zip,lat,lon,timezone,isp,org,as,query").json()
-        if response['status'] == 'success':
-            print(f"\n{Fore.GREEN}[+] Información para IP: {ip}")
-            print(f"    {Fore.WHITE}País: {response.get('country')}")
-            print(f"    {Fore.WHITE}Ciudad: {response.get('city')} ({response.get('regionName')})")
-            print(f"    {Fore.WHITE}ISP: {response.get('isp')}")
-            print(f"    {Fore.WHITE}ASN: {response.get('as')}")
-            print(f"    {Fore.WHITE}Coordenadas: {response.get('lat')}, {response.get('lon')}")
-        else:
-            print(f"{Fore.RED}[!] No se pudo obtener geo-data de {ip}")
-    except Exception as e:
-        print(f"{Fore.RED}[!] Error en API: {e}")
+def save_to_file(domain, content):
+    filename = f"scan_{domain.replace('.', '_')}.txt"
+    with open(filename, "a", encoding="utf-8") as f:
+        f.write(content + "\n")
 
-def get_http_headers(domain):
-    print(f"\n{Fore.YELLOW}[*] Analizando Headers HTTP...")
+def get_geo_info(ip, domain):
     try:
-        target = f"http://{domain}" if not domain.startswith("http") else domain
-        res = requests.get(target, timeout=5)
-        for key, value in res.headers.items():
-            print(f"    {Fore.WHITE}{key}: {value}")
+        url = f"http://ip-api.com/json/{ip}?fields=status,country,regionName,city,isp,as,query"
+        data = requests.get(url).json()
+        
+        if data['status'] == 'success':
+            info = (
+                f"\n[+] IP INVESTIGADA: {data['query']}\n"
+                f"    País: {data.get('country')}\n"
+                f"    Ciudad: {data.get('city')} ({data.get('regionName')})\n"
+                f"    ISP: {data.get('isp')}\n"
+                f"    ASN: {data.get('as')}\n"
+            )
+            print(Fore.GREEN + info)
+            save_to_file(domain, info)
     except Exception as e:
-        print(f"{Fore.RED}[!] Error al conectar vía HTTP.")
+        print(Fore.RED + f"[!] Error obteniendo Geo-IP: {e}")
+
+def track_http(domain):
+    print(Fore.YELLOW + "\n[*] Analizando HTTP Tracking & Headers...")
+    try:
+        url = f"http://{domain}" if not domain.startswith("http") else domain
+        r = requests.get(url, timeout=5)
+        header_info = f"--- HTTP HEADERS ({domain}) ---\n"
+        for k, v in r.headers.items():
+            line = f"{k}: {v}"
+            print(f"    {Fore.WHITE}{line}")
+            header_info += line + "\n"
+        save_to_file(domain, header_info)
+    except:
+        print(Fore.RED + "    [!] No se pudo conectar al servidor HTTP.")
 
 def run_traceroute(domain):
-    print(f"\n{Fore.YELLOW}[*] Iniciando Traceroute (Rastreo de ruta)...")
+    print(Fore.YELLOW + f"\n[*] Iniciando Traceroute hacia {domain}...")
     try:
-        # Ejecuta un traceroute simplificado
-        ans, unans = traceroute(domain, verbose=0, maxttl=20)
-        ans.show()
-    except Exception:
-        print(f"{Fore.RED}[!] Permisos insuficientes para Traceroute (usa sudo en Kali).")
+        # En Windows/Termux sin root esto puede fallar, en Kali con sudo funciona perfecto
+        res, unans = traceroute(domain, verbose=0, maxttl=20)
+        print(Fore.WHITE + "    [Ruta completada]")
+        # Guardamos el resumen
+        save_to_file(domain, f"--- TRACEROUTE INFO ---\n{res.show(dump=True)}")
+    except:
+        print(Fore.RED + "    [!] Traceroute requiere privilegios de ROOT (Sudo).")
 
-def scan_domain(domain):
+def main():
+    os.system('clear' if os.name == 'posix' else 'cls')
+    banner()
+    
+    target = input(f"{Fore.WHITE}Ingrese el dominio o URL: ").strip().replace("https://", "").replace("http://", "")
+    
+    if not target:
+        print(Fore.RED + "Debes ingresar un dominio válido.")
+        return
+
+    print(f"\n{Fore.CYAN} INICIANDO ESCANEO: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    save_to_file(target, f"ESCANEO DE INFRAESTRUCTURA - {target}\nFecha: {datetime.now()}\n" + "="*40)
+
     try:
-        print(f"{Fore.YELLOW}[*] Resolviendo DNS y Servidores de Nombres...")
-        # Obtener IP principal
-        primary_ip = socket.gethostbyname(domain)
+        # 1. Obtener todas las IPs del dominio
+        print(Fore.YELLOW + "[*] Resolviendo DNS...")
+        ips = list(set([info[4][0] for info in socket.getaddrinfo(target, 80)]))
         
-        # Obtener todas las IPs asociadas (Round Robin / Balanceadores)
-        addr_info = socket.getaddrinfo(domain, 80)
-        ips = list(set([info[4][0] for info in addr_info]))
-
-        print(f"{Fore.CYAN}[i] Dominio: {domain}")
-        print(f"{Fore.CYAN}[i] IPs detectadas: {', '.join(ips)}")
-
-        # Geolocation y datos de cada IP
+        # 2. Procesar cada IP
         for ip in ips:
-            get_geo_info(ip)
-
-        # HTTP Tracking
-        get_http_headers(domain)
-
-        # Traceroute
-        run_traceroute(domain)
+            get_geo_info(ip, target)
+        
+        # 3. HTTP Track
+        track_http(target)
+        
+        # 4. Traceroute
+        run_traceroute(target)
+        
+        print(f"\n{Fore.GREEN}[✔] Escaneo completo. Datos guardados en: scan_{target.replace('.', '_')}.txt")
 
     except socket.gaierror:
-        print(f"{Fore.RED}[!] Error: El dominio no pudo ser resuelto.")
+        print(Fore.RED + "[!] Error: No se pudo resolver el dominio.")
     except KeyboardInterrupt:
-        print(f"\n{Fore.YELLOW}[!] Escaneo cancelado por el usuario.")
+        print(Fore.YELLOW + "\n[!] Detenido por el usuario.")
 
 if __name__ == "__main__":
-    banner()
-    if len(sys.argv) > 1:
-        target_domain = sys.argv[1]
-    else:
-        target_domain = input(f"{Fore.WHITE}Introduce el dominio (ej: google.com): ")
-    
-    scan_domain(target_domain)
+    main()
